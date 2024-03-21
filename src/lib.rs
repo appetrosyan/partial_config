@@ -1,7 +1,9 @@
+use core::fmt::Debug;
+
 pub trait Partial: Default {
     type Target: HasPartial<Partial = Self>;
 
-    type Error;
+    type Error: Debug;
 
     fn build(self) -> Result<Self::Target, Self::Error>;
 
@@ -15,7 +17,7 @@ pub trait HasPartial {
 }
 
 pub trait Source<C: HasPartial> {
-    type Error;
+    type Error: Debug;
 
     fn to_partial(self) -> Result<C::Partial, Self::Error>;
 
@@ -26,6 +28,7 @@ impl<T, C, E> Source<C> for Option<T>
 where
     C: HasPartial,
     T: Source<C, Error = E>,
+    E: Debug
 {
     type Error = E;
 
