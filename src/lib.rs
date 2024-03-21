@@ -21,7 +21,7 @@ pub trait Source<C: HasPartial> {
 
     fn to_partial(self) -> Result<C::Partial, Self::Error>;
 
-    fn name(&self) -> &str;
+    fn name(&self) -> String;
 }
 
 impl<T, C, E> Source<C> for Option<T>
@@ -39,9 +39,9 @@ where
         )
     }
     
-    fn name(&self) -> &str {
+    fn name(&self) -> String {
         self.as_ref().map_or(
-            "Unspecified",
+            "Unspecified".to_owned(),
             |v| v.name(),
         )
     }
