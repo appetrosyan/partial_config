@@ -1,12 +1,20 @@
 [package]
 name = "partial_config"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
-author = "Aleksandr Petrosyan"
+authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
 license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+serde = ["dep:serde"]
+json = ["serde_json/std"]
+toml = ["toml/parse"]
+
 [dependencies]
- 
+serde = { version = "1.0.197", optional = true, default-features = false }
+serde_json = { version = "1.0.114", optional = true, default-features = false }
+toml = { version = "0.8.12", optional = true, default-features = false }
