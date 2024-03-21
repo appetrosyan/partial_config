@@ -5,7 +5,7 @@ pub trait Partial: Default {
 
     fn build(self) -> Result<Self::Target, Self::Error>;
 
-    fn source(self, value: impl Source<Self::Target>) -> Result<Self::Target, Self::Error>;
+    fn source(self, value: impl Source<Self::Target>) -> Result<Self, Self::Error>;
 
     fn override_with(self, other: Self) -> Self;
 }
