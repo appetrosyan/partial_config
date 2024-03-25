@@ -1,6 +1,6 @@
 [package]
 name = "partial_config"
-version = "0.5.3"
+version = "0.5.10"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
@@ -11,6 +11,7 @@ license = "Apache-2.0"
 [features]
 default = []
 serde = ["dep:serde"]
+eyre = ["dep:eyre"]
 json = ["serde_json/std"]
 toml = ["toml/parse"]
 derive = ["dep:partial_config_derive"]
@@ -25,3 +26,4 @@ partial_config_derive = { version = "0.1.0", optional = true, path = "derive/" }
 proc-macro2 = "1.0.79"
 log = { version = "0.4.21", optional = true }
 tracing = { version = "0.1.40", optional = true }
+eyre = { version = "0.6.12", optional = true }

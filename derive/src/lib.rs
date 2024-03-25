@@ -196,6 +196,9 @@ fn is_option(ty: &syn::Type) -> bool {
     }
 }
 
+#[cfg(all(feature = "tracing", feature = "log"))]
+compile_error!("The features \"tracing\" and \"log\" are mutually exclusive. Please either use pure tracing, or enable the \"log\" feature in \"tracing\" and use the \"log\" feature of this crate. ");
+
 fn assembling_config() -> syn::Stmt {
     #[cfg(feature = "tracing")]
     syn::parse_quote! {
