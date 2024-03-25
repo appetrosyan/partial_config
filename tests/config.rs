@@ -2,10 +2,15 @@ use partial_config::HasPartial;
 
 pub struct Optional;
 
+#[derive(Default, Debug)]
+pub struct CustomStruct;
+
+pub type Height = Option<u64>;
+
 #[derive(HasPartial)]
 pub struct Configuration {
-    /// This ise documented
-    thing: u64,
-    height: u64,
-    thing2: Option<usize>,
+    pub str1: String,
+    pub port: u64,
+    pub height: Height,
+    pub custom_struct: CustomStruct,
 }

@@ -27,8 +27,10 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         syn::Fields::Unnamed(_) => unreachable!(),
         syn::Fields::Unit => unreachable!(),
     };
-    let (optional_fields, required_fields): (Punctuated<Field, Comma>, Punctuated<Field, Comma>) =
-        fields.into_iter().partition(|field| is_option(&field.ty));
+    let (optional_fields, required_fields): (
+        Punctuated<Field, Comma>,
+        Punctuated<Field, Comma>,
+    ) = fields.into_iter().partition(|field| is_option(&field.ty));
 
     let required_fields: Punctuated<Field, Comma> = required_fields
         .into_iter()
@@ -146,7 +148,6 @@ fn impl_partial(
         .collect();
 
     let assembling_config: syn::Stmt = assembling_config();
-    let sourcing_config: syn::Stmt = sourcing_config();
 
     Ok(quote::quote! {
         impl #generics ::partial_config::Partial for #partial_ident #generics {
@@ -161,7 +162,6 @@ fn impl_partial(
                 #req_field_expr
                 #opt_field_expr
 
-
                 if missing_fields.is_empty() {
                     #error
                 } else {
@@ -173,17 +173,12 @@ fn impl_partial(
                 }
             }
 
-            fn source(self, value: impl ::partial_config::Source<Self::Target>) -> Result<Self, Self::Error> {
-                #sourcing_config
-                let partial = value.to_partial()?;
-                Ok(self.override_with(partial))
-            }
-
             fn override_with(self, other: Self) -> Self {
                 #override_expr
                 Self {
                     #all_fields
                 }
+        
             }
         }
     })
@@ -198,21 +193,6 @@ fn is_option(ty: &syn::Type) -> bool {
             .map(|segment| segment.ident == "Option")
             .unwrap_or(false),
         _ => false,
-    }
-}
-
-fn sourcing_config() -> syn::Stmt {
-    #[cfg(feature = "tracing")]
-    syn::parse_quote! {
-        ::tracing::info!("Sourcing confiugration from `{}`", value.name());
-    }
-    #[cfg(feature = "log")]
-    syn::parse_quote! {
-        ::log::info!("Sourcing configuration from `{}`", value.name());
-    }
-    #[cfg(not(any(feature = "tracing", feature = "log")))]
-    syn::parse_quote! {
-        println!("Sourcing configuration from `{}`", value.name());
     }
 }
 
