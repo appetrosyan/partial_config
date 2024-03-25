@@ -1,4 +1,6 @@
 use core::fmt::Debug;
+mod error;
+pub use error::{Error, MissingField};
 
 #[cfg(feature = "derive")]
 pub use partial_config_derive::HasPartial;
@@ -25,18 +27,6 @@ pub trait Partial: Default {
     }
 
     fn override_with(self, other: Self) -> Self;
-}
-
-#[derive(Debug)]
-pub struct MissingField<'a>(pub &'a str);
-
-#[derive(Debug)]
-pub enum Error {
-    MissingFields {
-        required_fields: Vec<MissingField<'static>>,
-    },
-    #[cfg(feature = "serde")]
-    FileReadError(serde_support::FileReadError),
 }
 
 pub trait HasPartial {
@@ -96,6 +86,33 @@ pub mod serde_support {
     impl From<std::io::Error> for FileReadError {
         fn from(value: std::io::Error) -> Self {
             Self::Open(value)
+        }
+    }
+
+    impl core::fmt::Display for FileReadError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> core::fmt::Result {
+            match self {
+                Self::NoExtension => {
+                    write!(f, "No file extension provided. Aborting")
+                }
+                Self::UnsupportedExtension(s) => {
+                    write!(f, "The file extension {s} is not supported")
+                }
+                Self::NoFile(path) => {
+                    write!(f, "The file {path:?} could not be found")
+                }
+                Self::Open(err) => {
+                    write!(f, "The file system reported the following error {err}")
+                }
+                #[cfg(feature = "toml")]
+                Self::Toml(te) => {
+                    write!(f, "Error parsing TOML file {te}")
+                }
+                #[cfg(feature = "json")]
+                Self::Json(je) => {
+                    write!(f, "Error parsing JSON file {je}")
+                }
+            }
         }
     }
 
