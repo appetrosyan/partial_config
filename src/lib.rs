@@ -44,7 +44,7 @@ pub trait HasPartial {
 }
 
 pub trait Source<C: HasPartial> {
-    type Error: Debug + Into<<C::Partial as Partial>::Error>;
+    type Error: Debug;
 
     fn to_partial(self) -> Result<C::Partial, Self::Error>;
 
@@ -55,7 +55,7 @@ impl<T, C, E> Source<C> for Option<T>
 where
     C: HasPartial,
     T: Source<C, Error = E>,
-    E: Debug + Into<<C::Partial as Partial>::Error>,
+    E: Debug,
 {
     type Error = E;
 
