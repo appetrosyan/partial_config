@@ -16,7 +16,7 @@ pub trait Partial: Default {
 }
 
 #[derive(Debug)]
-pub struct MissingField<'a>(&'a str);
+pub struct MissingField<'a>(pub &'a str);
 
 #[derive(Debug)]
 pub enum Error {

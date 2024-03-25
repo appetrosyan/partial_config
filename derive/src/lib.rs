@@ -1,10 +1,5 @@
 use proc_macro::TokenStream;
-use quote::format_ident;
-use syn::{
-    punctuated::Punctuated,
-    token::{Comma, Type},
-    DeriveInput, Field, Generics, Ident, TypePath, Visibility,
-};
+use syn::{punctuated::Punctuated, token::Comma, DeriveInput, Field, Generics, Ident};
 
 #[proc_macro_derive(HasPartial)]
 pub fn has_partial(input: TokenStream) -> TokenStream {
@@ -32,10 +27,8 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         syn::Fields::Unnamed(_) => unreachable!(),
         syn::Fields::Unit => unreachable!(),
     };
-    let (mut optional_fields, required_fields): (
-        Punctuated<Field, Comma>,
-        Punctuated<Field, Comma>,
-    ) = fields.into_iter().partition(|field| is_option(&field.ty));
+    let (optional_fields, required_fields): (Punctuated<Field, Comma>, Punctuated<Field, Comma>) =
+        fields.into_iter().partition(|field| is_option(&field.ty));
 
     let required_fields: Punctuated<Field, Comma> = required_fields
         .into_iter()
@@ -59,13 +52,18 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         &required_fields,
         &optional_fields,
     )
-        .unwrap();
-    optional_fields.extend(required_fields);
+    .unwrap();
+
+    let all_fields: Punctuated<Field, Comma> = optional_fields
+        .iter()
+        .cloned()
+        .chain(required_fields.iter().cloned())
+        .collect();
 
     let output = quote::quote! {
         #[derive(Debug, Default)]
         pub struct #partial_ident #generics {
-            #optional_fields
+            #all_fields
         }
 
         #[automatically_derived]
@@ -85,21 +83,70 @@ fn impl_partial(
     required_fields: &Punctuated<Field, Comma>,
     optional_fields: &Punctuated<Field, Comma>,
 ) -> Result<proc_macro2::TokenStream, &'static str> {
-    let assembling_config: syn::Stmt = syn::parse_quote! {todo!();};
-
     let error: syn::Expr = syn::parse_quote! {
         Err(::partial_config::Error::MissingFields {
             required_fields: missing_fields
         })
     };
 
-    let optional_fields: Punctuated<Ident, Comma> = optional_fields
+    let opt_fields: Punctuated<Ident, Comma> = optional_fields
         .iter()
         .cloned()
         .filter_map(|field| field.ident)
         .collect();
 
-    let required_fields_init = {};
+    let req_fields: Punctuated<Ident, Comma> = required_fields
+        .iter()
+        .cloned()
+        .filter_map(|field| field.ident)
+        .collect();
+
+    let req_field_expr: Punctuated<syn::Stmt, syn::token::Semi> = req_fields
+        .iter()
+        .cloned()
+        .map(|ident| -> syn::Stmt {
+            syn::parse_quote! {
+                let #ident = match self.#ident {
+                    Some(value) => value,
+                    None => {
+                        missing_fields.push(::partial_config::MissingField(stringify!(#ident)));
+                        Default::default()
+                    }
+                };
+            }
+        })
+        .collect();
+
+    let opt_field_expr: Punctuated<syn::Stmt, syn::token::Semi> = optional_fields
+        .iter()
+        .cloned()
+        .filter_map(|field: Field| {
+            field.ident.map(|ident| -> syn::Stmt {
+                // TODO: add explicit fallback
+                syn::parse_quote! {
+                    let #ident = self.#ident.unwrap_or_default();
+                }
+            })
+        })
+        .collect();
+
+    let all_fields: Punctuated<Ident, Comma> = opt_fields
+        .into_iter()
+        .chain(req_fields.into_iter())
+        .collect();
+
+    let override_expr: Punctuated<syn::Stmt, syn::token::Semi> = all_fields
+        .iter()
+        .cloned()
+        .map(|ident: Ident| -> syn::Stmt {
+            syn::parse_quote! {
+                let #ident = other.#ident.or(self.#ident);
+            }
+        })
+        .collect();
+
+    let assembling_config: syn::Stmt = assembling_config();
+    let sourcing_config: syn::Stmt = sourcing_config();
 
     Ok(quote::quote! {
         impl #generics ::partial_config::Partial for #partial_ident #generics {
@@ -111,6 +158,8 @@ fn impl_partial(
                 let mut missing_fields = ::std::vec::Vec::new();
                 #assembling_config;
 
+                #req_field_expr
+                #opt_field_expr
 
 
                 if missing_fields.is_empty() {
@@ -118,18 +167,23 @@ fn impl_partial(
                 } else {
                     Ok(
                         Self::Target {
-                            #optional_fields
+                            #all_fields
                         }
                     )
                 }
             }
 
             fn source(self, value: impl ::partial_config::Source<Self::Target>) -> Result<Self, Self::Error> {
-                todo!()
+                #sourcing_config
+                let partial = value.to_partial()?;
+                Ok(self.override_with(partial))
             }
 
             fn override_with(self, other: Self) -> Self {
-                todo!()
+                #override_expr
+                Self {
+                    #all_fields
+                }
             }
         }
     })
@@ -144,5 +198,35 @@ fn is_option(ty: &syn::Type) -> bool {
             .map(|segment| segment.ident == "Option")
             .unwrap_or(false),
         _ => false,
+    }
+}
+
+fn sourcing_config() -> syn::Stmt {
+    #[cfg(feature = "tracing")]
+    syn::parse_quote! {
+        ::tracing::info!("Sourcing confiugration from `{}`", value.name());
+    }
+    #[cfg(feature = "log")]
+    syn::parse_quote! {
+        ::log::info!("Sourcing configuration from `{}`", value.name());
+    }
+    #[cfg(not(any(feature = "tracing", feature = "log")))]
+    syn::parse_quote! {
+        println!("Sourcing configuration from `{}`", value.name());
+    }
+}
+
+fn assembling_config() -> syn::Stmt {
+    #[cfg(feature = "tracing")]
+    syn::parse_quote! {
+        ::tracing::info!(?self, "Building configuration");
+    }
+    #[cfg(feature = "log")]
+    syn::parse_quote! {
+        ::log::info!("Building configuration");
+    }
+    #[cfg(not(any(feature = "tracing", feature = "log")))]
+    syn::parse_quote! {
+        println!("Building configuration");
     }
 }

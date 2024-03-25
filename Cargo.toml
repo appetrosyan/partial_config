@@ -1,7 +1,7 @@
 workspace = { members = ["derive"] }
 [package]
 name = "partial_config"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
@@ -15,6 +15,8 @@ serde = ["dep:serde"]
 json = ["serde_json/std"]
 toml = ["toml/parse"]
 derive = ["dep:partial_config_derive"]
+tracing = ["partial_config_derive/tracing"]
+log = ["partial_config_derive/log"]
 
 [dependencies]
 serde = { version = "1.0.197", optional = true, default-features = false }
