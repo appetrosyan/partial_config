@@ -2,12 +2,12 @@ use partial_config::HasPartial;
 
 pub struct Optional;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, serde::Deserialize)]
 pub struct CustomStruct;
 
 pub type Height = Option<u64>;
 
-#[derive(HasPartial)]
+#[derive(HasPartial, serde::Deserialize)]
 pub struct Configuration {
     pub str1: String,
     pub port: u64,

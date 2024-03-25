@@ -24,8 +24,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
 
     let fields = match strct.fields {
         syn::Fields::Named(namede) => namede.named,
-        syn::Fields::Unnamed(_) => unreachable!(),
-        syn::Fields::Unit => unreachable!(),
+        _  => unreachable!(),
     };
     let (optional_fields, required_fields): (
         Punctuated<Field, Comma>,
@@ -62,8 +61,19 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .chain(required_fields.iter().cloned())
         .collect();
 
+    let derives: syn::Attribute  = {
+        #[cfg(feature = "serde")]
+        syn::parse_quote! {
+            #[derive(Debug, Default, ::serde::Deserialize)]
+        }
+        #[cfg(not(feature = "serde"))]
+        syn::parse_quote! {
+            #[derive(Debug, Default)]
+        }
+    };
+
     let output = quote::quote! {
-        #[derive(Debug, Default)]
+        #derives
         pub struct #partial_ident #generics {
             #all_fields
         }
