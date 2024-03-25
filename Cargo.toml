@@ -1,6 +1,6 @@
 [package]
 name = "partial_config"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
