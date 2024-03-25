@@ -27,6 +27,13 @@ pub enum Error {
     EyreReport(eyre::Report)
 }
 
+#[cfg(feature = "serde")]
+impl From<crate::serde_support::FileReadError> for Error {
+    fn from(value: crate::serde_support::FileReadError) -> Self {
+        Self::FileReadError(value)
+    }
+}
+
 impl From<std::num::ParseIntError> for Error {
     fn from(value: std::num::ParseIntError) -> Self {
         Self::ParseIntError(value)
