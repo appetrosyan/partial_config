@@ -1,5 +1,8 @@
 use core::fmt::Debug;
 
+#[cfg(feature = "derive")]
+pub use partial_config_derive::HasPartial;
+
 pub trait Partial: Default {
     type Target: HasPartial<Partial = Self>;
 
@@ -10,6 +13,18 @@ pub trait Partial: Default {
     fn source(self, value: impl Source<Self::Target>) -> Result<Self, Self::Error>;
 
     fn override_with(self, other: Self) -> Self;
+}
+
+#[derive(Debug)]
+pub struct MissingField<'a>(&'a str);
+
+#[derive(Debug)]
+pub enum Error {
+    MissingFields {
+        required_fields: MissingField<'static>,
+    },
+    #[cfg(feature = "serde")]
+    FileReadError(serde_support::FileReadError),
 }
 
 pub trait HasPartial {
@@ -48,7 +63,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-pub mod serde {
+pub mod serde_support {
     use super::{HasPartial, Source};
 
     #[cfg(feature = "toml")]
@@ -161,3 +176,4 @@ pub mod serde {
      }
  }
 }
+
