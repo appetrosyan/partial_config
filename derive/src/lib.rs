@@ -24,12 +24,10 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
 
     let fields = match strct.fields {
         syn::Fields::Named(namede) => namede.named,
-        _  => unreachable!(),
+        _ => unreachable!(),
     };
-    let (optional_fields, required_fields): (
-        Punctuated<Field, Comma>,
-        Punctuated<Field, Comma>,
-    ) = fields.into_iter().partition(|field| is_option(&field.ty));
+    let (optional_fields, required_fields): (Punctuated<Field, Comma>, Punctuated<Field, Comma>) =
+        fields.into_iter().partition(|field| is_option(&field.ty));
 
     let required_fields: Punctuated<Field, Comma> = required_fields
         .into_iter()
@@ -61,7 +59,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .chain(required_fields.iter().cloned())
         .collect();
 
-    let derives: syn::Attribute  = {
+    let derives: syn::Attribute = {
         #[cfg(feature = "serde")]
         syn::parse_quote! {
             #[derive(Debug, Default, ::serde::Deserialize)]
@@ -113,6 +111,8 @@ fn impl_partial(
         .filter_map(|field| field.ident)
         .collect();
 
+    let assembling_config: syn::Stmt = assembling_config(req_fields.len(), opt_fields.len());
+
     let req_field_expr: Punctuated<syn::Stmt, syn::token::Semi> = req_fields
         .iter()
         .cloned()
@@ -136,7 +136,7 @@ fn impl_partial(
             field.ident.map(|ident| -> syn::Stmt {
                 // TODO: add explicit fallback
                 syn::parse_quote! {
-                    let #ident = self.#ident.unwrap_or_default();
+                    let #ident = self.#ident;
                 }
             })
         })
@@ -157,8 +157,6 @@ fn impl_partial(
         })
         .collect();
 
-    let assembling_config: syn::Stmt = assembling_config();
-
     Ok(quote::quote! {
         impl #generics ::partial_config::Partial for #partial_ident #generics {
             type Target = #ident #generics;
@@ -172,7 +170,7 @@ fn impl_partial(
                 #req_field_expr
                 #opt_field_expr
 
-                if missing_fields.is_empty() {
+                if !missing_fields.is_empty() {
                     #error
                 } else {
                     Ok(
@@ -188,7 +186,7 @@ fn impl_partial(
                 Self {
                     #all_fields
                 }
-        
+
             }
         }
     })
@@ -209,17 +207,19 @@ fn is_option(ty: &syn::Type) -> bool {
 #[cfg(all(feature = "tracing", feature = "log"))]
 compile_error!("The features \"tracing\" and \"log\" are mutually exclusive. Please either use pure tracing, or enable the \"log\" feature in \"tracing\" and use the \"log\" feature of this crate. ");
 
-fn assembling_config() -> syn::Stmt {
+fn assembling_config(required_fields_count: usize, optional_fields_count: usize) -> syn::Stmt {
     #[cfg(feature = "tracing")]
     syn::parse_quote! {
-        ::tracing::info!(?self, "Building configuration");
+        {
+            ::tracing::info!(?self, "Building configuration {required_fields_count} ({optional_fields_count})", required_fields_count = #required_fields_count, optional_fields_count=#optional_fields_count);
+        }
     }
     #[cfg(feature = "log")]
     syn::parse_quote! {
-        ::log::info!("Building configuration");
+        ::log::info!("Building configuration. {required_fields_count} ({optional_fields_count}) fields", required_fields_count = #required_fields_count, optional_fields_count=#optional_fields_count);
     }
     #[cfg(not(any(feature = "tracing", feature = "log")))]
     syn::parse_quote! {
-        println!("Building configuration");
+        println!("Building configuration. {required_fields_count} ({optional_fields_count}) fields", required_fields_count = #required_fields_count, optional_fields_count=#optional_fields_count);
     }
 }
