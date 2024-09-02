@@ -19,12 +19,12 @@ pub enum Error {
         first_source: String,
         first_setting: String,
         second_source: String,
-        second_setting: String
+        second_setting: String,
     },
     #[cfg(feature = "serde")]
     FileReadError(crate::serde_support::FileReadError),
     #[cfg(feature = "eyre")]
-    EyreReport(eyre::Report)
+    EyreReport(eyre::Report),
 }
 
 #[cfg(feature = "serde")]
@@ -51,21 +51,26 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::MissingFields { required_fields } => {
-                let fields: Vec<&str>= required_fields.iter().map(|field| {field.0}).collect();
+                let fields: Vec<&str> = required_fields.iter().map(|field| field.0).collect();
                 write!(f, "The required fields [{}] were not specified in any of the configuration sources", fields.join(", "))
-            },
+            }
             Error::ParseIntError(per) => write!(f, "Failed to parse integer. {per}"),
-            Error::InconsistentSetting{ first_source, first_setting, second_source, second_setting } => {
+            Error::InconsistentSetting {
+                first_source,
+                first_setting,
+                second_source,
+                second_setting,
+            } => {
                 write!(f, "The field was set twice first to {first_setting} in {first_source} and then a second time to {second_setting} in {second_source}")
-            },
+            }
             #[cfg(feature = "eyre")]
             Error::EyreReport(report) => {
                 write!(f, "{report:?}")
-            },
+            }
             #[cfg(feature = "serde")]
-                Error::FileReadError(err) => {
-                    write!(f, "File read error: `{}`", err)
-                }
+            Error::FileReadError(err) => {
+                write!(f, "File read error: `{}`", err)
+            }
         }
     }
 }

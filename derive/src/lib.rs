@@ -1,12 +1,18 @@
-use proc_macro::TokenStream;
-use syn::{punctuated::Punctuated, token::Comma, DeriveInput, Field, Generics, Ident};
+use std::collections::{BTreeSet, HashMap};
 
-#[proc_macro_derive(HasPartial)]
+use proc_macro::TokenStream;
+use quote::ToTokens;
+use syn::{
+    punctuated::Punctuated, token::Comma, Attribute, DeriveInput, Field, Generics, Ident, Meta,
+};
+
+#[proc_macro_derive(HasPartial, attributes(partial_derives, partial_rename, env_source))]
 pub fn has_partial(input: TokenStream) -> TokenStream {
     let DeriveInput {
         ident,
         generics,
         data,
+        attrs,
         ..
     } = syn::parse_macro_input!(input as DeriveInput);
     // TODO: support renaming partial
@@ -14,7 +20,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
     // TODO: warn on private structs
     // TODO: panic on generics
 
-    let partial_ident = quote::format_ident!("Partial{}", ident);
+    let partial_ident = partial_struct_name(&ident, &attrs);
 
     let strct = match data {
         syn::Data::Struct(thing) => thing,
@@ -59,16 +65,9 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .chain(required_fields.iter().cloned())
         .collect();
 
-    let derives: syn::Attribute = {
-        #[cfg(feature = "serde")]
-        syn::parse_quote! {
-            #[derive(Debug, Default, ::serde::Deserialize)]
-        }
-        #[cfg(not(feature = "serde"))]
-        syn::parse_quote! {
-            #[derive(Debug, Default)]
-        }
-    };
+    // TODO: Forward all other derives unless otherwise specified.
+    // Do not remove serde unless required to
+    let derives: Attribute = attribute_assign(&attrs);
 
     let output = quote::quote! {
         #derives
@@ -84,6 +83,46 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(output)
+}
+
+fn partial_struct_name(ident: &Ident, attrs: &Vec<Attribute>) -> Ident {
+    let mut ident = quote::format_ident!("Partial{}", ident);
+    for attr in attrs {
+        if attr.path().is_ident("partial_rename") {
+            let identifier: Ident = attr
+                .parse_args()
+                .expect("Failed to parse partial_rename identifier");
+            ident = identifier;
+        }
+    }
+    ident
+}
+
+fn attribute_assign(attrs: &Vec<Attribute>) -> Attribute {
+    let mut derives: Punctuated<syn::Path, Comma> = Punctuated::new();
+    for attr in attrs {
+        if attr.path().is_ident("partial_derives") {
+            let nested = attr
+                .parse_args_with(Punctuated::<Meta, syn::Token![,]>::parse_terminated)
+                .expect("Invalid specification for `partial_derives`");
+            for item in nested {
+                match item {
+                    Meta::Path(pth) =>  {
+                        derives.push(pth);
+                    },
+                    item => panic!("The paths specified must be specific derive macros, e.g. Clone, got {} instead, which is not allowed", item.to_token_stream())
+                }
+            }
+        }
+    }
+
+    // TODO: emit warning
+    if !derives.iter().any(|thing| thing.is_ident("Default")) {
+        derives.push(syn::parse_quote! {Default});
+    }
+    syn::parse_quote! {
+        #[derive(#derives)]
+    }
 }
 
 fn impl_partial(
@@ -222,4 +261,126 @@ fn assembling_config(required_fields_count: usize, optional_fields_count: usize)
     syn::parse_quote! {
         println!("Building configuration. {required_fields_count} ({optional_fields_count}) fields", required_fields_count = #required_fields_count, optional_fields_count=#optional_fields_count);
     }
+}
+
+#[proc_macro_derive(EnvSourced, attributes(env_var_rename, env))]
+pub fn env_sourced(input: TokenStream) -> TokenStream {
+    let DeriveInput { data, attrs, .. } = syn::parse_macro_input!(input as DeriveInput);
+
+    let out_ident: Ident = env_var_struct_name(attrs);
+    let strct = match data {
+        syn::Data::Struct(strct) => strct,
+        syn::Data::Enum(_) => panic!("Enums are not supported"),
+        syn::Data::Union(_) => panic!("Data unions are not supported"),
+    };
+
+    let fields: Punctuated<Field, Comma> = match strct.fields {
+        syn::Fields::Named(fld) => fld.named,
+        _ => unreachable!(),
+    };
+
+    let EnvVarFieldsResult {
+        fields: all_fields,
+        default_mappings,
+    } = env_var_fields(fields);
+
+    let impl_default_tokens = impl_default_env(default_mappings);
+
+    let output = quote::quote! {
+        pub struct #out_ident {
+            #all_fields
+        }
+
+        impl ::partial_config::env::EnvSourced for #out_ident {}
+
+        impl Default for #out_ident {
+            fn default() -> Self {
+                #impl_default_tokens
+            }
+        }
+    };
+    eprintln!("{:#}", output);
+    TokenStream::from(output)
+}
+
+struct EnvVarFieldsResult {
+    fields: Punctuated<Field, Comma>,
+    default_mappings: HashMap<Ident, BTreeSet<Ident>>,
+}
+
+fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::ExprStruct {
+    let elements: Punctuated<syn::FieldValue, Comma> = default_mappings
+        .iter()
+        .map(|(field_name, env_var_strings)| -> syn::FieldValue {
+            let env_var_strings: Punctuated<syn::LitStr, Comma> =
+                env_var_strings.iter().cloned().map(|ident| -> syn::LitStr {syn::LitStr::new(&ident.to_string(), proc_macro2::Span::call_site())}).collect();
+            syn::parse_quote! {
+                #field_name: [#env_var_strings]
+            }
+        })
+        .collect();
+
+    syn::parse_quote! {
+        Self {
+            #elements
+        }
+    }
+}
+
+fn env_var_fields(fields: Punctuated<Field, Comma>) -> EnvVarFieldsResult {
+    let mut output = Punctuated::new();
+    let mut default_mappings: HashMap<Ident, BTreeSet<Ident>> = HashMap::new();
+    for field in fields {
+        let mut n = 0_usize;
+        let attrs = field.attrs.iter().cloned().filter_map(|attr| {
+            if attr.path().is_ident("env") {
+                let nested = attr.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated).expect("Invalid specification for the `env` attribute");
+                let env_vars: BTreeSet<Ident> = nested.iter().
+                    filter_map(|item| {
+                        match item {
+                            Meta::Path(pth) => Some(pth.get_ident().expect("Must have identifier and not a path").clone()),
+                            _ => None
+                        }
+                    })
+                    .collect();
+                n+=env_vars.len();
+                let key = field.ident.clone().expect("Identifiers for all fields must be known at this point");
+                default_mappings.entry(key.clone())
+                    .and_modify(|previous| {
+                        if !previous.is_disjoint(&env_vars) {
+                            panic!("Environment variable specifications must be disjoint. The field {key} has the following duplicate specifications {:?}",
+                                previous.intersection(&env_vars).map(|ident| ident.to_string()).collect::<Vec<_>>());
+                        }
+                        previous.extend(env_vars.iter().cloned())
+                    })
+                    .or_insert(env_vars);
+                None
+            } else {
+                Some(attr)
+            }
+        }).collect();
+        // TODO: check uniqueness in leaf nodes
+        let ty: syn::Type = syn::parse_quote! {
+            [&'static str; #n]
+        };
+        output.push(Field { ty, attrs, ..field });
+    }
+
+    EnvVarFieldsResult {
+        fields: output,
+        default_mappings,
+    }
+}
+
+fn env_var_struct_name(attrs: Vec<Attribute>) -> Ident {
+    let mut ident = syn::parse_quote! { EnvVarSource };
+    for attr in attrs {
+        if attr.path().is_ident("env_var_rename") {
+            let identifier: Ident = attr
+                .parse_args()
+                .expect("Failed to parse env_var_rename identifier. ");
+            ident = identifier;
+        }
+    }
+    ident
 }

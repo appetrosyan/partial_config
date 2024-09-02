@@ -1,11 +1,19 @@
-use partial_config::{Error, HasPartial, Partial};
-use proc_macro2::token_stream;
+use partial_config::{EnvSourced, Error, HasPartial, Partial};
 
 pub struct Optional;
 
 pub type Height = Option<u64>;
 
-#[derive(HasPartial, serde::Deserialize)]
+#[derive(Debug, EnvSourced)]
+pub struct Conf {
+    #[env(THING1, THING2)]
+    #[env(THING3)]
+    pub str1: String,
+}
+
+#[derive(Clone, HasPartial, serde::Deserialize)]
+#[partial_derives(Clone)]
+#[partial_rename(CustomPartialConfiguration)]
 pub struct Configuration {
     pub str1: &'static str,
     pub port: u64,
@@ -14,14 +22,17 @@ pub struct Configuration {
     pub optional_field: Option<u64>,
 }
 
-#[derive(Default, Debug, serde::Deserialize)]
+#[derive(Debug, Default)]
+pub struct EnvVarSomething;
+
+#[derive(Clone, Copy, Default, Debug, serde::Deserialize)]
 pub struct Str1OnlySource;
 
 impl partial_config::Source<Configuration> for Str1OnlySource {
     type Error = Error;
 
     fn to_partial(self) -> Result<<Configuration as HasPartial>::Partial, Self::Error> {
-        Ok(PartialConfiguration {
+        Ok(CustomPartialConfiguration {
             str1: Some("CustomStruct"),
             port: None,
             height: None,
@@ -42,7 +53,7 @@ impl partial_config::Source<Configuration> for OptionalOnlySource {
     type Error = Error;
 
     fn to_partial(self) -> Result<<Configuration as HasPartial>::Partial, Self::Error> {
-        Ok(PartialConfiguration {
+        Ok(CustomPartialConfiguration {
             str1: None,
             port: None,
             height: None,
@@ -63,7 +74,7 @@ impl partial_config::Source<Configuration> for DefaultSource {
     type Error = Error;
 
     fn to_partial(self) -> Result<<Configuration as HasPartial>::Partial, Self::Error> {
-        Ok(PartialConfiguration {
+        Ok(CustomPartialConfiguration {
             str1: Some(Default::default()),
             port: Some(Default::default()),
             height: Some(Default::default()),
@@ -79,7 +90,7 @@ impl partial_config::Source<Configuration> for DefaultSource {
 
 #[test]
 fn incomplete_config_fails_to_build() {
-    let conf = PartialConfiguration::default()
+    let conf = CustomPartialConfiguration::default()
         .source(Str1OnlySource)
         .unwrap()
         .build();
@@ -93,7 +104,7 @@ fn incomplete_config_fails_to_build() {
 
 #[test]
 fn complete_config_overrides_correctly() {
-    let conf = PartialConfiguration::default()
+    let conf = CustomPartialConfiguration::default()
         .source(Str1OnlySource)
         .unwrap()
         .source(DefaultSource)
@@ -101,7 +112,7 @@ fn complete_config_overrides_correctly() {
         .build()
         .unwrap();
     assert_eq!(conf.str1, "".to_owned());
-    let conf = PartialConfiguration::default()
+    let conf = CustomPartialConfiguration::default()
         .source(DefaultSource)
         .unwrap()
         .source(Str1OnlySource)
@@ -110,7 +121,7 @@ fn complete_config_overrides_correctly() {
         .unwrap();
     assert_eq!(conf.str1, "CustomStruct".to_owned());
 
-    let conf = PartialConfiguration::default()
+    let conf = CustomPartialConfiguration::default()
         .source(OptionalOnlySource)
         .unwrap()
         .source(DefaultSource)
@@ -118,12 +129,19 @@ fn complete_config_overrides_correctly() {
         .build()
         .unwrap();
     assert_eq!(conf.optional_field, Some(42));
-    let conf = PartialConfiguration::default()
+    let conf = CustomPartialConfiguration::default()
         .source(DefaultSource)
         .unwrap()
         .source(OptionalOnlySource)
         .unwrap()
+        .clone()
         .build()
         .unwrap();
     assert_eq!(conf.optional_field, Some(42_u64));
+    assert_eq!(conf.clone().optional_field, Some(42_u64))
+}
+
+#[test]
+fn rename_works() {
+    EnvVarSomething::default();
 }
