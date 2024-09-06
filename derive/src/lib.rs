@@ -63,7 +63,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .iter()
         .cloned()
         .chain(required_fields.iter().cloned())
-        .map(|field| Field { attrs: vec![], ..field })
+        .map(|field| Field { attrs: field.attrs.into_iter().filter(|attr| !attr.path().is_ident("env")).collect(), ..field })
         .collect();
 
     // TODO: Forward all other derives unless otherwise specified.
