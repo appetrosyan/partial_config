@@ -4,7 +4,7 @@ pub struct Optional;
 
 pub type Height = Option<u64>;
 
-#[derive(Debug, EnvSourced)]
+#[derive(Debug, HasPartial, EnvSourced)]
 pub struct Conf {
     #[env(THING1, THING2)]
     #[env(THING3)]

@@ -6,7 +6,7 @@ use syn::{
     punctuated::Punctuated, token::Comma, Attribute, DeriveInput, Field, Generics, Ident, Meta,
 };
 
-#[proc_macro_derive(HasPartial, attributes(partial_derives, partial_rename, env_source))]
+#[proc_macro_derive(HasPartial, attributes(partial_derives, partial_rename, env_source, env))]
 pub fn has_partial(input: TokenStream) -> TokenStream {
     let DeriveInput {
         ident,
@@ -63,6 +63,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .iter()
         .cloned()
         .chain(required_fields.iter().cloned())
+        .map(|field| Field { attrs: vec![], ..field })
         .collect();
 
     // TODO: Forward all other derives unless otherwise specified.
@@ -81,7 +82,6 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         #impl_has_partial
     };
-
     TokenStream::from(output)
 }
 
@@ -265,7 +265,7 @@ fn assembling_config(required_fields_count: usize, optional_fields_count: usize)
 
 #[proc_macro_derive(EnvSourced, attributes(env_var_rename, env))]
 pub fn env_sourced(input: TokenStream) -> TokenStream {
-    let DeriveInput { data, attrs, .. } = syn::parse_macro_input!(input as DeriveInput);
+    let DeriveInput { data, attrs, ident: in_ident, .. } = syn::parse_macro_input!(input as DeriveInput);
 
     let out_ident: Ident = env_var_struct_name(attrs);
     let strct = match data {
@@ -282,20 +282,43 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
     let EnvVarFieldsResult {
         fields: all_fields,
         default_mappings,
-    } = env_var_fields(fields);
+    } = env_var_fields(&fields);
 
-    let impl_default_tokens = impl_default_env(default_mappings);
+    let default_struct = impl_default_env(default_mappings);
+    let impl_source = impl_source(&fields);
 
     let output = quote::quote! {
-        pub struct #out_ident {
+        pub struct #out_ident<'a> {
             #all_fields
         }
 
-        impl ::partial_config::env::EnvSourced for #out_ident {}
+        impl<'a> ::partial_config::env::EnvSourced for #out_ident<'a> {}
 
-        impl Default for #out_ident {
+        impl<'a> #out_ident<'a> {
+            pub const fn new() -> Self {
+                #default_struct
+            }
+        }
+
+        impl<'a> Default for #out_ident<'a> {
             fn default() -> Self {
-                #impl_default_tokens
+                    #default_struct
+            }
+        }
+
+        impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
+            type Error = ::partial_config::Error;
+
+            fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
+                pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
+
+                Ok(Issue86935Workaround {
+                    #impl_source
+                })
+            }
+
+            fn name(&self) -> String {
+                "Environment Variables".to_owned()
             }
         }
     };
@@ -306,6 +329,33 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
 struct EnvVarFieldsResult {
     fields: Punctuated<Field, Comma>,
     default_mappings: HashMap<Ident, BTreeSet<Ident>>,
+}
+
+fn is_string(ty: &syn::Type) -> bool {
+    match ty {
+        syn::Type::Path(pth) => pth.path.is_ident("String") || pth.path.is_ident("str"),
+        syn::Type::Reference(reference) => is_string(&reference.elem),
+        _ => false,
+    }
+}
+
+fn impl_source(fields: &Punctuated<Field, Comma>) -> Punctuated<syn::FieldValue, Comma> {
+    fields.iter().map(|Field { ident, ty, .. }| -> syn::FieldValue {
+        if let Some(ident) = ident {
+            if is_string(&ty) {
+                syn::parse_quote! {
+                    #ident: ::partial_config::env::extract(&self.#ident)?
+                }
+        } else {
+            syn::parse_quote! {
+                #ident: ::partial_config::env::extract(&self.#ident)?.map(|s: String| <#ty as ::core::str::FromStr>::from_str(&s)).transpose()
+                .map_err(|e| ::partial_config::Error { field_name: stringify!(#ident), field_type: stringify(#ty), error_condition: e})?
+            }
+        }
+        } else {
+            panic!("Non-struct like fields are not allowed");
+        }
+    }).collect()
 }
 
 fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::ExprStruct {
@@ -327,7 +377,7 @@ fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::E
     }
 }
 
-fn env_var_fields(fields: Punctuated<Field, Comma>) -> EnvVarFieldsResult {
+fn env_var_fields(fields: &Punctuated<Field, Comma>) -> EnvVarFieldsResult {
     let mut output = Punctuated::new();
     let mut default_mappings: HashMap<Ident, BTreeSet<Ident>> = HashMap::new();
     for field in fields {
@@ -361,9 +411,9 @@ fn env_var_fields(fields: Punctuated<Field, Comma>) -> EnvVarFieldsResult {
         }).collect();
         // TODO: check uniqueness in leaf nodes
         let ty: syn::Type = syn::parse_quote! {
-            [&'static str; #n]
+            [&'a str; #n]
         };
-        output.push(Field { ty, attrs, ..field });
+        output.push(Field { ty, attrs, ..field.clone() });
     }
 
     EnvVarFieldsResult {
