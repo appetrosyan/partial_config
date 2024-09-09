@@ -103,10 +103,8 @@ pub mod env {
                     #[cfg(not(any(feature = "log", feature = "tracing")))]
                     eprintln!("The value of the environment variable for `{candidate}` was not Unicode. Got {thing:?}");
                 }
-                (None, Ok(value)) => {
-                    found = Some((candidate, value))
-                }
-                (Some((previous_key, previous_string)), Ok(value)) if *previous_string == value  =>  {
+                (None, Ok(value)) => found = Some((candidate, value)),
+                (Some((previous_key, previous_string)), Ok(value)) if *previous_string == value => {
                     #[cfg(feature = "tracing")]
                     tracing::warn!("Redundant specification of the environment variable {candidate}, which was previously set via {previous_key}");
                     #[cfg(feature = "log")]
@@ -125,9 +123,9 @@ pub mod env {
                         first_source: format!("Environment variable {previous_key}"),
                         first_setting: previous_string.clone(),
                         second_source: format!("Environment variable {candidate}"),
-                        second_setting: value
+                        second_setting: value,
                     };
-                    return Err(err)
+                    return Err(err);
                 }
             }
         }

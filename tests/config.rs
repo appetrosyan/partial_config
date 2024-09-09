@@ -9,6 +9,9 @@ pub struct Conf {
     #[env(THING1, THING2)]
     #[env(THING3)]
     pub str1: String,
+
+    #[env(THING3)]
+    pub obj2: usize,
 }
 
 #[derive(Clone, HasPartial, serde::Deserialize)]

@@ -1,12 +1,16 @@
-use std::collections::{BTreeSet, HashMap};
-
 use proc_macro::TokenStream;
+use proc_macro_error2::proc_macro_error;
+use proc_macro_error2::{OptionExt, ResultExt};
 use quote::ToTokens;
+use std::collections::{BTreeSet, HashMap};
 use syn::{
     punctuated::Punctuated, token::Comma, Attribute, DeriveInput, Field, Generics, Ident, Meta,
 };
 
-#[proc_macro_derive(HasPartial, attributes(partial_derives, partial_rename, env_source, env))]
+#[proc_macro_derive(
+    HasPartial,
+    attributes(partial_derives, partial_rename, env_source, env, partial_only)
+)]
 pub fn has_partial(input: TokenStream) -> TokenStream {
     let DeriveInput {
         ident,
@@ -22,10 +26,17 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
     let partial_ident = partial_struct_name(&ident, &attrs);
 
     let strct = match data {
-        syn::Data::Struct(thing) => thing,
-        syn::Data::Enum(_) => panic!("Enums are not supported"),
-        syn::Data::Union(_) => panic!("Data unions are not supported"),
-    };
+        syn::Data::Struct(thing) => Some(thing),
+        syn::Data::Enum(_) => {
+            proc_macro_error2::emit_error!(ident, "Enums are not supported");
+            None
+        }
+        syn::Data::Union(_) => {
+            proc_macro_error2::emit_error!(ident, "Data unions are not supported");
+            None
+        }
+    }
+    .unwrap();
 
     let fields = match strct.fields {
         syn::Fields::Named(namede) => namede.named,
@@ -62,15 +73,34 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         .iter()
         .cloned()
         .chain(required_fields.iter().cloned())
-        .map(|field| Field { attrs: field.attrs.into_iter().filter(|attr| !attr.path().is_ident("env")).collect(), ..field })
+        .map(|field| Field {
+            attrs: field
+                .attrs
+                .into_iter()
+                .filter(|attr| !attr.path().is_ident("env"))
+                .map(|attr| {
+                    if attr.path().is_ident("partial_only") {
+                        let contents: syn::Meta = attr
+                            .parse_args()
+                            .expect_or_abort("Attribute failed to parse");
+                        syn::parse_quote! {
+                            #[#contents]
+                        }
+                    } else {
+                        attr
+                    }
+                })
+                .collect(),
+            ..field
+        })
         .collect();
 
     // TODO: Forward all other derives unless otherwise specified.
     // Do not remove serde unless required to
-    let derives: Attribute = attribute_assign(&attrs);
+    let derives: Vec<Attribute> = attribute_assign(&attrs);
 
     let output = quote::quote! {
-        #derives
+        #(#derives)*
         pub struct #partial_ident #generics {
             #all_fields
         }
@@ -90,28 +120,36 @@ fn partial_struct_name(ident: &Ident, attrs: &Vec<Attribute>) -> Ident {
         if attr.path().is_ident("partial_rename") {
             let identifier: Ident = attr
                 .parse_args()
-                .expect("Failed to parse partial_rename identifier");
+                .expect_or_abort("Failed to parse partial_rename identifier");
             ident = identifier;
         }
     }
     ident
 }
 
-fn attribute_assign(attrs: &Vec<Attribute>) -> Attribute {
+fn attribute_assign(attrs: &Vec<Attribute>) -> Vec<Attribute> {
     let mut derives: Punctuated<syn::Path, Comma> = Punctuated::new();
+    let mut out_attrs: Vec<Attribute> = Vec::new();
     for attr in attrs {
         if attr.path().is_ident("partial_derives") {
             let nested = attr
                 .parse_args_with(Punctuated::<Meta, syn::Token![,]>::parse_terminated)
-                .expect("Invalid specification for `partial_derives`");
+                .expect_or_abort("Invalid specification for `partial_derives`");
             for item in nested {
                 match item {
                     Meta::Path(pth) =>  {
                         derives.push(pth);
                     },
-                    item => panic!("The paths specified must be specific derive macros, e.g. Clone, got {} instead, which is not allowed", item.to_token_stream())
+                    item => proc_macro_error2::abort!(item, "The paths specified must be specific derive macros, e.g. Clone, got {} instead, which is not allowed", item.to_token_stream())
                 }
             }
+        } else if attr.path().is_ident("partial_only") {
+            let contents: syn::Meta = attr
+                .parse_args()
+                .expect_or_abort("Attributes failed to parse");
+            out_attrs.push(syn::parse_quote! {
+                #[#contents]
+            })
         }
     }
 
@@ -119,9 +157,9 @@ fn attribute_assign(attrs: &Vec<Attribute>) -> Attribute {
     if !derives.iter().any(|thing| thing.is_ident("Default")) {
         derives.push(syn::parse_quote! {Default});
     }
-    syn::parse_quote! {
+    vec![syn::parse_quote! {
         #[derive(#derives)]
-    }
+    }]
 }
 
 fn impl_partial(
@@ -262,9 +300,15 @@ fn assembling_config(required_fields_count: usize, optional_fields_count: usize)
     }
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(EnvSourced, attributes(env_var_rename, env))]
 pub fn env_sourced(input: TokenStream) -> TokenStream {
-    let DeriveInput { data, attrs, ident: in_ident, .. } = syn::parse_macro_input!(input as DeriveInput);
+    let DeriveInput {
+        data,
+        attrs,
+        ident: in_ident,
+        ..
+    } = syn::parse_macro_input!(input as DeriveInput);
 
     let out_ident: Ident = env_var_struct_name(attrs);
     let strct = match data {
@@ -287,39 +331,39 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
     let impl_source = impl_source(&fields);
 
     let output = quote::quote! {
-        pub struct #out_ident<'a> {
-            #all_fields
+    pub struct #out_ident<'a> {
+        #all_fields
+    }
+
+    impl<'a> ::partial_config::env::EnvSourced for #out_ident<'a> {}
+
+    impl<'a> #out_ident<'a> {
+        pub const fn new() -> Self {
+            #default_struct
+        }
+    }
+
+    impl<'a> Default for #out_ident<'a> {
+        fn default() -> Self {
+            #default_struct
+        }
+    }
+
+    impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
+        type Error = ::partial_config::Error;
+
+        fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
+            pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
+
+            Ok(Issue86935Workaround {
+                #impl_source
+            })
         }
 
-        impl<'a> ::partial_config::env::EnvSourced for #out_ident<'a> {}
-
-        impl<'a> #out_ident<'a> {
-            pub const fn new() -> Self {
-                #default_struct
-            }
+        fn name(&self) -> String {
+            "Environment Variables".to_owned()
         }
-
-        impl<'a> Default for #out_ident<'a> {
-            fn default() -> Self {
-                    #default_struct
-            }
-        }
-
-        impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
-            type Error = ::partial_config::Error;
-
-            fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
-                pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
-
-                Ok(Issue86935Workaround {
-                    #impl_source
-                })
-            }
-
-            fn name(&self) -> String {
-                "Environment Variables".to_owned()
-            }
-        }
+    }
     };
     TokenStream::from(output)
 }
@@ -347,11 +391,11 @@ fn impl_source(fields: &Punctuated<Field, Comma>) -> Punctuated<syn::FieldValue,
         } else {
             syn::parse_quote! {
                 #ident: ::partial_config::env::extract(&self.#ident)?.map(|s: String| <#ty as ::core::str::FromStr>::from_str(&s)).transpose()
-                .map_err(|e| ::partial_config::Error { field_name: stringify!(#ident), field_type: stringify(#ty), error_condition: e})?
+                .map_err(|e| ::partial_config::Error::ParseFieldError { field_name: stringify!(#ident), field_type: stringify!(#ty), error_condition: Box::new(e)})?
             }
         }
         } else {
-            panic!("Non-struct like fields are not allowed");
+            proc_macro_error2::abort!(ident, "Non-struct like fields are not allowed");
         }
     }).collect()
 }
@@ -360,8 +404,13 @@ fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::E
     let elements: Punctuated<syn::FieldValue, Comma> = default_mappings
         .iter()
         .map(|(field_name, env_var_strings)| -> syn::FieldValue {
-            let env_var_strings: Punctuated<syn::LitStr, Comma> =
-                env_var_strings.iter().cloned().map(|ident| -> syn::LitStr {syn::LitStr::new(&ident.to_string(), proc_macro2::Span::call_site())}).collect();
+            let env_var_strings: Punctuated<syn::LitStr, Comma> = env_var_strings
+                .iter()
+                .cloned()
+                .map(|ident| -> syn::LitStr {
+                    syn::LitStr::new(&ident.to_string(), proc_macro2::Span::call_site())
+                })
+                .collect();
             syn::parse_quote! {
                 #field_name: [#env_var_strings]
             }
@@ -380,39 +429,46 @@ fn env_var_fields(fields: &Punctuated<Field, Comma>) -> EnvVarFieldsResult {
     let mut default_mappings: HashMap<Ident, BTreeSet<Ident>> = HashMap::new();
     for field in fields {
         let mut n = 0_usize;
-        let attrs = field.attrs.iter().cloned().filter_map(|attr| {
+        field.attrs.iter().for_each(|attr| {
             if attr.path().is_ident("env") {
-                let nested = attr.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated).expect("Invalid specification for the `env` attribute");
+                let nested = attr.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated).expect_or_abort("Invalid specification for the `env` attribute");
                 let env_vars: BTreeSet<Ident> = nested.iter().
                     filter_map(|item| {
                         match item {
-                            Meta::Path(pth) => Some(pth.get_ident().expect("Must have identifier and not a path").clone()),
+                            Meta::Path(pth) => Some(pth.get_ident().expect_or_abort("Must have identifier and not a path").clone()),
                             _ => None
                         }
                     })
                     .collect();
                 n+=env_vars.len();
-                let key = field.ident.clone().expect("Identifiers for all fields must be known at this point");
+                let key = field.ident.clone().expect_or_abort("Identifiers for all fields must be known at this point");
                 default_mappings.entry(key.clone())
                     .and_modify(|previous| {
                         if !previous.is_disjoint(&env_vars) {
-                            panic!("Environment variable specifications must be disjoint. The field {key} has the following duplicate specifications {:?}",
+                            proc_macro_error2::emit_error!(key, "Environment variable specifications must be disjoint. The field {key} has the following duplicate specifications {:?}",
                                 previous.intersection(&env_vars).map(|ident| ident.to_string()).collect::<Vec<_>>());
                         }
                         previous.extend(env_vars.iter().cloned())
                     })
                     .or_insert(env_vars);
-                None
-            } else {
-                Some(attr)
             }
-        }).collect();
+        });
+        if n == 0 {
+            proc_macro_error2::emit_error!(field.ident, "At least one `env` directive must be specified";
+                help = "Try using an uppercase version of the field name: {}", field.ident.to_token_stream().to_string().to_uppercase();
+                note = "It is better to enforce that all env-var deserializeable fields are explicitly set in the code.")
+        }
         // TODO: check uniqueness in leaf nodes
         // TODO: Check for empty nodes and replace with uppercase
         let ty: syn::Type = syn::parse_quote! {
             [&'a str; #n]
         };
-        output.push(Field { ty, attrs, ..field.clone() });
+
+        output.push(Field {
+            ty,
+            attrs: vec![],
+            ..field.clone()
+        });
     }
 
     EnvVarFieldsResult {
@@ -427,7 +483,7 @@ fn env_var_struct_name(attrs: Vec<Attribute>) -> Ident {
         if attr.path().is_ident("env_var_rename") {
             let identifier: Ident = attr
                 .parse_args()
-                .expect("Failed to parse env_var_rename identifier. ");
+                .expect_or_abort("Failed to parse env_var_rename identifier. ");
             ident = identifier;
         }
     }

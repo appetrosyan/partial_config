@@ -24,7 +24,7 @@ pub enum Error {
     ParseFieldError {
         field_name: &'static str,
         field_type: &'static str,
-        error_condition: Box<dyn std::error::Error + Send + Sync>
+        error_condition: Box<dyn std::error::Error + Send + Sync>,
     },
     #[cfg(feature = "serde")]
     FileReadError(crate::serde_support::FileReadError),
@@ -68,13 +68,17 @@ impl core::fmt::Display for Error {
             } => {
                 write!(f, "The field was set twice first to {first_setting} in {first_source} and then a second time to {second_setting} in {second_source}")
             }
-            Error::ParseFieldError { field_name, field_type, error_condition } => {
+            Error::ParseFieldError {
+                field_name,
+                field_type,
+                error_condition,
+            } => {
                 write!(f, "The field {field_name} failed to convert to {field_type}, because of {error_condition}")
             }
             #[cfg(feature = "eyre")]
-                Error::EyreReport(report) => {
-                    write!(f, "{report:?}")
-                }
+            Error::EyreReport(report) => {
+                write!(f, "{report:?}")
+            }
             #[cfg(feature = "serde")]
             Error::FileReadError(err) => {
                 write!(f, "File read error: `{}`", err)
