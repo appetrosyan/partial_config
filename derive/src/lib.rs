@@ -15,7 +15,6 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         attrs,
         ..
     } = syn::parse_macro_input!(input as DeriveInput);
-    // TODO: support renaming partial
     // TODO: support inheriting `pub(crate)
     // TODO: warn on private structs
     // TODO: panic on generics
@@ -322,7 +321,6 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
             }
         }
     };
-    eprintln!("{:#}", output);
     TokenStream::from(output)
 }
 
@@ -410,6 +408,7 @@ fn env_var_fields(fields: &Punctuated<Field, Comma>) -> EnvVarFieldsResult {
             }
         }).collect();
         // TODO: check uniqueness in leaf nodes
+        // TODO: Check for empty nodes and replace with uppercase
         let ty: syn::Type = syn::parse_quote! {
             [&'a str; #n]
         };

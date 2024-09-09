@@ -1,6 +1,6 @@
 [package]
 name = "partial_config"
-version = "0.6.1"
+version = "0.7.0-rc1"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
@@ -19,7 +19,7 @@ tracing = ["partial_config_derive/tracing", "dep:tracing"]
 log = ["partial_config_derive/log", "dep:log"]
 
 [dependencies]
-partial_config_derive = { version = "0.4.0", optional = true, path = "derive/" }
+partial_config_derive = { version = "0.5.0-rc1", optional = true, path = "derive/" }
 
 serde = { version = "1.0.197", optional = true, default-features = false }
 serde_json = { version = "1.0.114", optional = true, default-features = false }

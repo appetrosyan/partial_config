@@ -24,7 +24,7 @@ pub enum Error {
     ParseFieldError {
         field_name: &'static str,
         field_type: &'static str,
-        error_condition: Box<dyn std::error::Error>
+        error_condition: Box<dyn std::error::Error + Send + Sync>
     },
     #[cfg(feature = "serde")]
     FileReadError(crate::serde_support::FileReadError),
