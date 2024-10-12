@@ -170,7 +170,7 @@ fn impl_partial(
     optional_fields: &Punctuated<Field, Comma>,
 ) -> Result<proc_macro2::TokenStream, &'static str> {
     let error: syn::Expr = syn::parse_quote! {
-        Err(::partial_config::Error::MissingFields {
+        ::core::result::Result::Err(::partial_config::Error::MissingFields {
             required_fields: missing_fields
         })
     };
@@ -331,40 +331,42 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
     let impl_source = impl_source(&fields);
 
     let output = quote::quote! {
-    pub struct #out_ident<'a> {
-        #all_fields
-    }
-
-    impl<'a> ::partial_config::env::EnvSourced for #out_ident<'a> {}
-
-    impl<'a> #out_ident<'a> {
-        pub const fn new() -> Self {
-            #default_struct
-        }
-    }
-
-    impl<'a> Default for #out_ident<'a> {
-        fn default() -> Self {
-            #default_struct
-        }
-    }
-
-    impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
-        type Error = ::partial_config::Error;
-
-        fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
-            pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
-
-            Ok(Issue86935Workaround {
-                #impl_source
-            })
+        pub struct #out_ident<'a> {
+            #all_fields
         }
 
-        fn name(&self) -> String {
-            "Environment Variables".to_owned()
+            impl<'a> ::partial_config::env::EnvSourced<'a> for #in_ident {
+                type Source = #out_ident<'a>;
+            }
+
+            impl<'a> #out_ident<'a> {
+                pub const fn new() -> Self {
+    #default_struct
+            }
         }
-    }
-    };
+
+            impl<'a> Default for #out_ident<'a> {
+                fn default() -> Self {
+                    #default_struct
+                }
+            }
+
+            impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
+                type Error = ::partial_config::Error;
+
+                fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
+                pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
+
+                Ok(Issue86935Workaround {
+                    #impl_source
+                })
+            }
+
+            fn name(&self) -> String {
+                "Environment Variables".to_owned()
+            }
+        }
+        };
     TokenStream::from(output)
 }
 
