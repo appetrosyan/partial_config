@@ -12,11 +12,11 @@ license = "Apache-2.0"
 default = ["derive", "serde"]
 serde = ["dep:serde", "partial_config_derive/serde"]
 eyre = ["dep:eyre"]
-json = ["serde_json/std"]
-toml = ["toml/parse"]
+json = ["dep:serde_json", "serde_json/std"]
+toml = ["dep:toml", "toml/parse"]
 derive = ["dep:partial_config_derive", "serde/derive"]
-tracing = ["partial_config_derive/tracing", "dep:tracing"]
-log = ["partial_config_derive/log", "dep:log"]
+tracing = ["dep:tracing", "partial_config_derive/tracing"]
+log = ["dep:log", "partial_config_derive/log"]
 
 [dependencies]
 partial_config_derive = { version = "0.5.0-rc2", optional = true, path = "derive/" }
@@ -28,3 +28,6 @@ proc-macro2 = "1.0.79"
 log = { version = "0.4.21", optional = true }
 tracing = { version = "0.1.40", optional = true }
 eyre = { version = "0.6.12", optional = true }
+
+[dev-dependencies]
+trybuild  = { version = "1.0" }

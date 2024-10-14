@@ -7,6 +7,7 @@ use syn::{
     punctuated::Punctuated, token::Comma, Attribute, DeriveInput, Field, Generics, Ident, Meta,
 };
 
+#[proc_macro_error]
 #[proc_macro_derive(
     HasPartial,
     attributes(partial_derives, partial_rename, env_source, env, partial_only)
@@ -17,31 +18,52 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         generics,
         data,
         attrs,
-        ..
+        vis
     } = syn::parse_macro_input!(input as DeriveInput);
     // TODO: support inheriting `pub(crate)
-    // TODO: warn on private structs
     // TODO: panic on generics
 
     let partial_ident = partial_struct_name(&ident, &attrs);
 
+    match vis {
+        syn::Visibility::Public(_) => {},
+        _ => proc_macro_error2::abort!(vis, "Cannot implement `HasPartial` for a private structure.";
+            help = "If your structure is private, it is better to convert to it with an `Into::into` rather than directly derive `HasPartial`, which by definition will expose some of the fields"
+        )
+    };
+
     let strct = match data {
-        syn::Data::Struct(thing) => Some(thing),
+        syn::Data::Struct(thing) => thing,
         syn::Data::Enum(_) => {
-            proc_macro_error2::emit_error!(ident, "Enums are not supported");
-            None
+            proc_macro_error2::abort!(
+                ident, "Enums are not supported.";
+                help = "While it is possible to support `enum`s in principle, this is most likely an X-Y problem. You should use `partial_config` to build your internal `enum` with an extra layer.",
+            );
         }
         syn::Data::Union(_) => {
-            proc_macro_error2::emit_error!(ident, "Data unions are not supported");
-            None
+            proc_macro_error2::abort!(
+                ident, "Data unions are not supported.";
+                help = "Data unions are not usually used in Safe Rust, even though they could be, this is discouraged in favour of Enums, which are not supported either. Consider using a `struct` instead."
+            );
         }
-    }
-    .unwrap();
+    };
 
     let fields = match strct.fields {
         syn::Fields::Named(namede) => namede.named,
-        _ => unreachable!(),
+        syn::Fields::Unnamed(flds) => {
+            proc_macro_error2::abort!(
+                flds, "Unnamed fields can't be named in configuration layers.";
+                help = "If the field is unnamed, I cannot find a consistent way of naming them in configuration layers, because they muse be human facing. You are probably applying this derive macro to a tuple structure, which is not a sensible input."
+            );
+        }
+        syn::Fields::Unit => {
+            proc_macro_error2::abort!(
+                strct.fields, "Unit fields cannot be named.";
+                help = "If the field is unnamed, I cannot find a consistent way of naming them in configuration layers. Add a dummy field with e.g. `PhantomData` to silence this error."
+            );
+        }
     };
+
     let (optional_fields, required_fields): (Punctuated<Field, Comma>, Punctuated<Field, Comma>) =
         fields.into_iter().partition(|field| is_option(&field.ty));
 
