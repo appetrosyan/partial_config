@@ -1,0 +1,10 @@
+error: Cannot implement `HasPartial` for a private structure.
+
+         = help: If your structure is private, it is better to convert to it with an `Into::into` rather than directly derive `HasPartial`, which by definition will expose some of the fields
+
+ --> tests/ui/vis_private.rs:1:10
+  |
+1 | #[derive(partial_config::HasPartial)]
+  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `partial_config::HasPartial` (in Nightly builds, run with -Z macro-backtrace for more info)

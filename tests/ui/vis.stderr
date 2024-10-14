@@ -1,0 +1,8 @@
+error: Cannot implement `HasPartial` for a private structure.
+
+         = help: If your structure is private, it is better to convert to it with an `Into::into` rather than directly derive `HasPartial`, which by definition will expose some of the fields
+
+ --> tests/ui/vis.rs:2:1
+  |
+2 | pub(crate) struct ConfigurationWarn {
+  | ^^^^^^^^^^

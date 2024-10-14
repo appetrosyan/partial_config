@@ -1,0 +1,8 @@
+error: Data unions are not supported.
+
+         = help: Data unions are not usually used in Safe Rust, even though they could be, this is discouraged in favour of Enums, which are not supported either. Consider using a `struct` instead.
+
+ --> tests/ui/unions.rs:3:11
+  |
+3 | pub union Conf {
+  |           ^^^^

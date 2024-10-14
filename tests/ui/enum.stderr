@@ -1,0 +1,8 @@
+error: Enums are not supported.
+
+         = help: While it is possible to support `enum`s in principle, this is most likely an X-Y problem. You should use `partial_config` to build your internal `enum` with an extra layer.
+
+ --> tests/ui/enum.rs:4:10
+  |
+4 | pub enum Conf {
+  |          ^^^^

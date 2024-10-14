@@ -1,0 +1,19 @@
+error: Unnamed fields can't be named in configuration layers.
+
+         = help: If the field is unnamed, I cannot find a consistent way of naming them in configuration layers, because they muse be human facing. You are probably applying this derive macro to a tuple structure, which is not a sensible input.
+
+ --> tests/ui/unnamed_fields.rs:4:16
+  |
+4 | pub struct Conf(Option<u64>);
+  |                ^^^^^^^^^^^^^
+
+error: Unit fields cannot be named.
+
+         = help: If the field is unnamed, I cannot find a consistent way of naming them in configuration layers. Add a dummy field with e.g. `PhantomData` to silence this error.
+
+ --> tests/ui/unnamed_fields.rs:6:10
+  |
+6 | #[derive(HasPartial)]
+  |          ^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `HasPartial` (in Nightly builds, run with -Z macro-backtrace for more info)
