@@ -10,6 +10,7 @@ license = "Apache-2.0"
 
 [features]
 default = ["derive", "serde"]
+
 serde = ["dep:serde", "partial_config_derive/serde"]
 eyre = ["dep:eyre"]
 json = ["dep:serde_json", "serde_json/std"]
@@ -24,7 +25,7 @@ partial_config_derive = { version = "0.5.0", optional = true, path = "derive/" }
 serde = { version = "1.0.197", optional = true, default-features = false }
 serde_json = { version = "1.0.114", optional = true, default-features = false }
 toml = { version = "0.8.12", optional = true, default-features = false }
-proc-macro2 = "1.0.79"
+proc-macro2 = { version = "1.0.79" }
 log = { version = "0.4.21", optional = true }
 tracing = { version = "0.1.40", optional = true }
 eyre = { version = "0.6.12", optional = true }
