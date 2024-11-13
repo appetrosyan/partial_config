@@ -18,7 +18,7 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
         generics,
         data,
         attrs,
-        vis
+        vis,
     } = syn::parse_macro_input!(input as DeriveInput);
     // TODO: support inheriting `pub(crate)
     // TODO: panic on generics
@@ -26,10 +26,12 @@ pub fn has_partial(input: TokenStream) -> TokenStream {
     let partial_ident = partial_struct_name(&ident, &attrs);
 
     match vis {
-        syn::Visibility::Public(_) => {},
-        _ => proc_macro_error2::abort!(vis, "Cannot implement `HasPartial` for a private structure.";
-            help = "If your structure is private, it is better to convert to it with an `Into::into` rather than directly derive `HasPartial`, which by definition will expose some of the fields"
-        )
+        syn::Visibility::Public(_) => {}
+        _ => {
+            proc_macro_error2::abort!(vis, "Cannot implement `HasPartial` for a private structure.";
+                help = "If your structure is private, it is better to convert to it with an `Into::into` rather than directly derive `HasPartial`, which by definition will expose some of the fields"
+            )
+        }
     };
 
     let strct = match data {
@@ -302,6 +304,41 @@ fn is_option(ty: &syn::Type) -> bool {
     }
 }
 
+fn extract_option_generic(ty: &syn::Type) -> syn::Type {
+    match ty {
+        syn::Type::Path(path) => path
+            .path
+            .segments
+            .last()
+            .map(|segment| match &segment.arguments {
+                syn::PathArguments::None => {
+                    proc_macro_error2::abort!(segment, "The Option does not have any arguments")
+                }
+                syn::PathArguments::Parenthesized(_) => proc_macro_error2::abort!(
+                    segment,
+                    "The option cannot have parenthesised arguments"
+                ),
+                syn::PathArguments::AngleBracketed(generics) => {
+                    match generics
+                        .args
+                        .first()
+                        .expect_or_abort("Cannot have an empty set of generic arguments")
+                    {
+                        syn::GenericArgument::Lifetime(_) => todo!(),
+                        syn::GenericArgument::Type(ty) => ty.clone(),
+                        syn::GenericArgument::Const(_) => todo!(),
+                        syn::GenericArgument::AssocType(_) => todo!(),
+                        syn::GenericArgument::AssocConst(_) => todo!(),
+                        syn::GenericArgument::Constraint(_) => todo!(),
+                        _ => todo!(),
+                    }
+                }
+            })
+            .expect_or_abort("Failed to obtain type"),
+        _ => todo!("Not implemented yet"),
+    }
+}
+
 #[cfg(all(feature = "tracing", feature = "log"))]
 compile_error!("The features \"tracing\" and \"log\" are mutually exclusive. Please either use pure tracing, or enable the \"log\" feature in \"tracing\" and use the \"log\" feature of this crate. ");
 
@@ -353,42 +390,42 @@ pub fn env_sourced(input: TokenStream) -> TokenStream {
     let impl_source = impl_source(&fields);
 
     let output = quote::quote! {
-        pub struct #out_ident<'a> {
-            #all_fields
+    pub struct #out_ident<'a> {
+        #all_fields
+    }
+
+    impl<'a> ::partial_config::env::EnvSourced<'a> for #in_ident {
+        type Source = #out_ident<'a>;
+    }
+
+    impl<'a> #out_ident<'a> {
+        pub const fn new() -> Self {
+            #default_struct
+        }
+    }
+
+    impl<'a> Default for #out_ident<'a> {
+        fn default() -> Self {
+            #default_struct
+        }
+    }
+
+    impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
+        type Error = ::partial_config::Error;
+
+        fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
+            pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
+
+            Ok(Issue86935Workaround {
+                #impl_source
+            })
         }
 
-            impl<'a> ::partial_config::env::EnvSourced<'a> for #in_ident {
-                type Source = #out_ident<'a>;
-            }
-
-            impl<'a> #out_ident<'a> {
-                pub const fn new() -> Self {
-    #default_struct
-            }
+        fn name(&self) -> String {
+            "Environment Variables".to_owned()
         }
-
-            impl<'a> Default for #out_ident<'a> {
-                fn default() -> Self {
-                    #default_struct
-                }
-            }
-
-            impl<'a> ::partial_config::Source<#in_ident> for #out_ident<'a> {
-                type Error = ::partial_config::Error;
-
-                fn to_partial(self) -> Result<<#in_ident as ::partial_config::HasPartial>::Partial, Self::Error> {
-                pub type Issue86935Workaround = <#in_ident as ::partial_config::HasPartial>::Partial;
-
-                Ok(Issue86935Workaround {
-                    #impl_source
-                })
-            }
-
-            fn name(&self) -> String {
-                "Environment Variables".to_owned()
-            }
-        }
-        };
+    }
+    };
     TokenStream::from(output)
 }
 
@@ -406,22 +443,37 @@ fn is_string(ty: &syn::Type) -> bool {
 }
 
 fn impl_source(fields: &Punctuated<Field, Comma>) -> Punctuated<syn::FieldValue, Comma> {
-    fields.iter().map(|Field { ident, ty, .. }| -> syn::FieldValue {
-        if let Some(ident) = ident {
-            if is_string(&ty) {
-                syn::parse_quote! {
-                    #ident: ::partial_config::env::extract(&self.#ident)?
+    fields
+        .iter()
+        .map(|Field { ident, ty, .. }| -> syn::FieldValue {
+            if let Some(ident) = ident {
+                if is_string(&ty) {
+                    syn::parse_quote! {
+                        #ident: ::partial_config::env::extract(&self.#ident)?
+                    }
+                } else {
+                    let inner_ty = if is_option(ty) {
+                        extract_option_generic(ty)
+                    } else {
+                        ty.clone()
+                    };
+                    syn::parse_quote! {
+                        #ident: ::partial_config::env::extract(&self.#ident)?
+                        .map(|s: String| <#inner_ty as ::core::str::FromStr>::from_str(&s))
+                        .transpose()
+                        .map_err(|e|
+                            ::partial_config::Error::ParseFieldError {
+                                field_name: stringify!(#ident),
+                                field_type: stringify!(#ty),
+                                error_condition: Box::new(e)
+                            })?
+                    }
                 }
-        } else {
-            syn::parse_quote! {
-                #ident: ::partial_config::env::extract(&self.#ident)?.map(|s: String| <#ty as ::core::str::FromStr>::from_str(&s)).transpose()
-                .map_err(|e| ::partial_config::Error::ParseFieldError { field_name: stringify!(#ident), field_type: stringify!(#ty), error_condition: Box::new(e)})?
+            } else {
+                proc_macro_error2::abort!(ident, "Non-struct like fields are not allowed");
             }
-        }
-        } else {
-            proc_macro_error2::abort!(ident, "Non-struct like fields are not allowed");
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::ExprStruct {

@@ -1,4 +1,4 @@
-//! Layered partial configuration for Rust command-line applications. 
+//! Layered partial configuration for Rust command-line applications.
 //!
 //! Think back to the last time you wrote a command line application that had to be deployed via
 //! Docker or some other containerisation service. You need to be able to specify the configuration
@@ -11,8 +11,8 @@
 //! the excellent [`clap`](https://docs.rs/clap/latest/clap/) package provides an intuitive way to
 //! navigate configuration options.
 //!
-//! So this pacakge provides you with two traits: `HasPartial` and `Source` which allow you to do 
-//! two things: 
+//! So this pacakge provides you with two traits: `HasPartial` and `Source` which allow you to do
+//! two things:
 //!   - `HasPartial` allows you to declare a structure that you will use as a configuration as having
 //!     a sister structure that consists of properly handled `Option` values for both optional values
 //!     that might not have to be specified in the same layer, and optional values, not specifying
@@ -25,7 +25,7 @@
 //!     implementation of `Source` for the `path`-like objects that automatically resolves to a
 //!     configuration layer for any structure for which `serde::Deserialize` can be automatically
 //!     derived. We plan to add a custom approach to this, because they way that `serde` handles error
-//!     reporting is not suitable for configuration files potentially written by humans. 
+//!     reporting is not suitable for configuration files potentially written by humans.
 //!
 //! # Examples
 //!
@@ -36,8 +36,8 @@
 //! #[partial_derives(Clone)]
 //! #[partial_rename(CustomNameForPartialConfigurationStruct)]
 //! pub struct Configuration {
-//!     file_name: String, 
-//!     port: u16, 
+//!     file_name: String,
+//!     port: u16,
 //!
 //!     configuration_file: Option<String>,
 //! }
@@ -46,18 +46,18 @@
 //! This example demonstrates the simplest usage of the derive macro. All it does, is it generates
 //! a new structure which is by default just `Partial<NameOfStructType>` but can be changed to
 //! whatever you like via the `partial_rename` attribute as seen above. The generated structure can
-//! derive some traits, which is helpful in case writing a manual `impl` block is challenging. 
+//! derive some traits, which is helpful in case writing a manual `impl` block is challenging.
 //!
 //! The macro recognises the `Option<String>` as an optional argument, meaning that if it's not
 //! present in any layer, it's just set to `None`. It does recognise that `port` is not optional,
 //! and if it is not specified in any layer, when the [`Partial::build`] function is invoked, an
-//! error is reported. 
+//! error is reported.
 //!
 //! As a common courtesy to the users, it's considered a good idea to report all missing or
 //! malformed configuration options at once, instead of waiting for the user to fix the first
 //! problem and then report the next one. In order to do so, you as the programmer would have to
 //! write a little bit of tedious code, which you get for free by simply deriving [`HasPartial`] on
-//! your type. 
+//! your type.
 
 use core::fmt::Debug;
 mod error;
@@ -75,7 +75,7 @@ pub use partial_config_derive::EnvSourced;
 /// close attention to the documentation of the provided methods. If your partial structure
 /// contains `Option`s only and is 1/1 correspondent to [`Partial::Target`] I would recommend
 /// either using the [`partial_config::HasPartial`] derive macro, or if you want to avoid using
-/// `syn`, to just `cargo expand` on the generated code and inline it. 
+/// `syn`, to just `cargo expand` on the generated code and inline it.
 pub trait Partial: Default {
     /// The full configuration for which this type is considered a partial state obtained from a
     /// configuration layer.
@@ -90,21 +90,21 @@ pub trait Partial: Default {
     /// construct [`Partial::Target`] with the information that we have obtained from other
     /// sources, and report any missing fields. Keep in mind that the correct implementation
     /// **should** at least attempt to report all missing or malformed fields at once, instead of
-    /// failing as soon as the first one is identified. 
+    /// failing as soon as the first one is identified.
     fn build(self) -> Result<Self::Target, Self::Error>;
 
     /// Obtain [`Self`] from an object that is known to be a [`Source`] of the appropriate partial
     /// configuraiton. You should not override this function, unless you want to change the
-    /// reporting. 
+    /// reporting.
     ///
     /// One thing to keep in mind is that the [`Partial::source`] function calls produce the
-    /// overriding pattern in the exact order in which they are applied. So 
-    /// ```rust
+    /// overriding pattern in the exact order in which they are applied. So
+    /// ```text
     /// PartialConfiguration::default().source(file).source(EnvVars).source(CliArgs)
     /// ```
     /// shall read the file first, override any file specified in the file with the value specified
     /// in the environment variables and override any of those with the CLI arguments and not the
-    /// reverse order. 
+    /// reverse order.
     fn source<T: Source<Self::Target>>(self, value: T) -> Result<Self, Self::Error>
     where
         <Self as Partial>::Error: From<<T as Source<<Self as Partial>::Target>>::Error>,
@@ -126,17 +126,17 @@ pub trait Partial: Default {
 }
 
 /// Marker trait that is used to allow a `derive` macro to generate a new structure. This trait is
-/// useful for doign some trait-level contraining, but otherwise has no useful data. 
+/// useful for doign some trait-level contraining, but otherwise has no useful data.
 pub trait HasPartial {
     /// The type that represents a partial state of `Self` obtained from a single configuration
     /// source. The idea is that you can build up many instances of [`HasPartial::Partial`],
     /// combine them with [`Partial::override_with`] and then use them to build a single instance
-    /// of `Self`. 
+    /// of `Self`.
     type Partial: Partial<Target = Self>;
 }
 
 /// The implementor of this trait is a source of configuration. The method [`Source::to_partial`]
-/// obtains a single layer of configuration and from a given source. 
+/// obtains a single layer of configuration and from a given source.
 ///
 /// This trait is mostly used for trait-level type checking so that the [`Partial::source`] method
 /// operates as expected. No user is ever expected to call [`Source::to_partial`] directly.
@@ -149,7 +149,7 @@ pub trait Source<C: HasPartial> {
 
     /// The name that is being printed whenever this layer of configuration is being parsed. If you
     /// came across this method to silence the `Sourcing configuration from XXX` message, instead
-    /// simply override the [`Partial::source`] method instead. 
+    /// simply override the [`Partial::source`] method instead.
     fn name(&self) -> String;
 }
 
@@ -185,22 +185,22 @@ pub mod env {
     ///
     /// # Errors
     ///
-    ///     - If any specified candidate environment variables has two
-    ///     different specifications
+    /// - If any specified candidate environment variables has two
+    ///  different specifications
     ///
     /// # Warns
     ///
     /// These are some conditions that are reported, but don't result
     /// in an `Err` variant being constructed.
     ///
-    ///     - `None` is returned if neither of the candidate environment
-    ///     variables was present, or all contained non-unicode values.
+    /// - `None` is returned if neither of the candidate environment
+    ///    variables was present, or all contained non-unicode values.
     ///
-    ///     - If two candidates are set to the same value, a warning is
-    ///     printed.
+    /// - If two candidates are set to the same value, a warning is
+    ///   printed.
     ///
-    ///     - If either one of the candidates is set to a non-unicode
-    ///     value, a warning is printed.
+    /// - If either one of the candidates is set to a non-unicode
+    ///   value, a warning is printed.
     pub fn extract(candidates: &[&str]) -> Result<Option<String>, super::Error> {
         let mut found = None;
         for candidate in candidates {
@@ -261,21 +261,20 @@ pub mod serde_support {
         Open(std::io::Error), // TODO: Implement proper `source` and other standard error traits.
 
         #[cfg(feature = "toml")]
-        Toml(toml::de::Error), // TODO: Implement proper `soruce` and standard error trait methods. 
+        Toml(toml::de::Error), // TODO: Implement proper `soruce` and standard error trait methods.
 
         #[cfg(feature = "json")]
         Json(serde_json::Error), // TODO: Implement proper `source` and standard eror trait
-                                 // methods. 
-
-        /// The file specified at this path does not exist. 
+        // methods.
+        /// The file specified at this path does not exist.
         NoFile(std::path::PathBuf),
 
-        /// The file extension is not recognised. 
+        /// The file extension is not recognised.
         UnsupportedExtension(String),
 
         /// The file has no extension. While UNIX supports files without extension, we do not
         /// believe that this is either sound reasoning or useful for many users. Just add `.toml`
-        /// or provide a custom implementation if you really need to use files without extensions. 
+        /// or provide a custom implementation if you really need to use files without extensions.
         NoExtension,
     }
 
@@ -319,7 +318,7 @@ pub mod serde_support {
     pub struct Toml<'a>(pub &'a std::path::Path);
 
     #[cfg(feature = "json")]
-    /// This is a strongly typed file with the JSON format and extension. Used for type checking. 
+    /// This is a strongly typed file with the JSON format and extension. Used for type checking.
     pub struct Json<'a>(pub &'a std::path::Path);
 
     #[cfg(feature = "json")]

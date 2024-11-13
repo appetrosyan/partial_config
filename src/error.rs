@@ -1,8 +1,8 @@
 //! Error types and variants used in this crate. They are provided for reference only, all traits
-//! accept an optional `Error` type which you should make use of if you need customised errors. 
+//! accept an optional `Error` type which you should make use of if you need customised errors.
 
 /// A field that is required is not specified in _any_ of the layers. Missing from one layer is not
-/// a hard error, and if you need that, you should consider using a different crate. 
+/// a hard error, and if you need that, you should consider using a different crate.
 #[derive(Debug)]
 pub struct MissingField<'a>(pub &'a str);
 
@@ -14,7 +14,7 @@ impl<'a> core::fmt::Display for MissingField<'a> {
 
 impl<'a> std::error::Error for MissingField<'a> {}
 
-/// All possible things that can go wrong when using `partial_config`. 
+/// All possible things that can go wrong when using `partial_config`.
 #[derive(Debug)]
 pub enum Error {
     /// Some of the required fields are missing
@@ -28,7 +28,7 @@ pub enum Error {
     /// A single setting was specified in two layers, and the two do not agree. This is useful in
     /// cases where you want to debug a _sticky_ setting that is strictly not supposed to be set,
     /// but is. It is also used for different aliases in the `EnvSourced` infrastructure of this
-    /// crate. 
+    /// crate.
     InconsistentSetting {
         first_source: String,
         first_setting: String,
@@ -37,18 +37,18 @@ pub enum Error {
     },
     /// The field failed to parse. This is a more generic, and therefore less useful version of the
     /// other errors. Consider creating your own error type if you plan to do anything other than
-    /// print the error message after this point. 
+    /// print the error message after this point.
     ParseFieldError {
         field_name: &'static str,
         field_type: &'static str,
         error_condition: Box<dyn std::error::Error + Send + Sync>,
     },
     #[cfg(feature = "serde")]
-    /// The file failed to read. 
+    /// The file failed to read.
     FileReadError(crate::serde_support::FileReadError),
     #[cfg(feature = "eyre")]
     /// This is a more sophisticated version of the `Box<dyn std::error::Error`, that can be
-    /// cloned. Highly recommended but not required. 
+    /// cloned. Highly recommended but not required.
     EyreReport(eyre::Report),
 }
 
@@ -56,7 +56,6 @@ pub enum Error {
 impl From<crate::serde_support::FileReadError> for Error {
     fn from(value: crate::serde_support::FileReadError) -> Self {
         Self::FileReadError(value)
-
     }
 }
 

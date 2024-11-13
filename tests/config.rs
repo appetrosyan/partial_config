@@ -12,6 +12,9 @@ pub struct Conf {
 
     #[env(THING3)]
     pub obj2: usize,
+
+    #[env(THING4)]
+    pub option: Option<u64>,
 }
 
 #[derive(Clone, HasPartial, serde::Deserialize)]
