@@ -184,3 +184,34 @@ fn env_skip_field_is_never_sourced_from_the_environment() {
     std::env::remove_var("THING_A");
     std::env::remove_var("B");
 }
+
+#[derive(Debug, HasPartial, EnvSourced)]
+#[env_var_rename(SecretEnvSource)]
+pub struct WithSecret {
+    #[env(APP_SECRET_TOKEN)]
+    pub token: partial_config::Redacted<String>,
+}
+
+/// A `Redacted<T>` field is an ordinary env-sourced field — parsed and wrapped — and the
+/// wrapper keeps it out of the partial's `Debug`, so it cannot leak when the configuration
+/// is logged.
+#[test]
+fn a_redacted_field_sources_from_the_environment_and_stays_hidden() {
+    std::env::set_var("APP_SECRET_TOKEN", "s3cr3t-value");
+
+    let partial =
+        <SecretEnvSource as partial_config::Source<WithSecret>>::to_partial(SecretEnvSource::new())
+            .unwrap();
+
+    assert_eq!(
+        partial.token.as_ref().map(|t| t.expose_secret().as_str()),
+        Some("s3cr3t-value"),
+        "the value is sourced into the wrapper"
+    );
+    assert!(
+        !format!("{:?}", partial.token).contains("s3cr3t-value"),
+        "and the wrapper hides it from Debug"
+    );
+
+    std::env::remove_var("APP_SECRET_TOKEN");
+}

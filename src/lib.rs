@@ -61,8 +61,10 @@
 
 use core::fmt::Debug;
 mod error;
+mod redacted;
 
 pub use error::{Error, MissingField};
+pub use redacted::Redacted;
 
 #[cfg(feature = "derive")]
 pub use partial_config_derive::HasPartial;

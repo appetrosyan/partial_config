@@ -10,7 +10,25 @@ Git tags are `partial_config-vX.Y.Z` and `partial_config_derive-vX.Y.Z`.
 
 ## [Unreleased]
 
-## [0.7.2] — 2026-07-15
+## [0.7.3] — 2026-07-15
+
+`partial_config_derive` unchanged at 0.5.2.
+
+### Added
+
+- **`Redacted<T>`** — a wrapper marking a value as sensitive. Its `Debug` and `Display`
+  render `[redacted]` and never reveal the inner value, so a secret (a DSN password, an
+  API token, a private key) cannot escape through a log line, an error, a `panic!`, or a
+  derived `Debug` on a struct containing it. It is a drop-in configuration field —
+  `FromStr` and (with `serde`) `Deserialize` delegate to the inner type, so it sources
+  from the environment, CLI, or a file exactly as the bare `T` would. The value is
+  reachable only through `expose_secret()` / `into_inner()`; there is deliberately no
+  `Deref`, `AsRef`, or `Serialize`.
+
+  This is the intended way to keep secrets out of the configuration log that `build()`
+  emits: wrap the field, and it redacts itself wherever it is printed, rather than the
+  crate trying to guess which fields are sensitive.
+
 
 `partial_config_derive` 0.5.2.
 
