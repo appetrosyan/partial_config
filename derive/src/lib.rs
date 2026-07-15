@@ -445,9 +445,17 @@ fn is_string(ty: &syn::Type) -> bool {
 fn impl_source(fields: &Punctuated<Field, Comma>) -> Punctuated<syn::FieldValue, Comma> {
     fields
         .iter()
-        .map(|Field { ident, ty, .. }| -> syn::FieldValue {
+        .map(|field| -> syn::FieldValue {
+            let Field { ident, ty, .. } = field;
             if let Some(ident) = ident {
-                if is_string(&ty) {
+                // A field that opted out with `#[env(skip)]` contributes nothing from this
+                // layer; it is left `None` for the CLI and default layers to supply.
+                if is_env_skip(field) {
+                    return syn::parse_quote! {
+                        #ident: None
+                    };
+                }
+                if is_string(ty) {
                     syn::parse_quote! {
                         #ident: ::partial_config::env::extract(&self.#ident)?
                     }
@@ -500,10 +508,32 @@ fn impl_default_env(default_mappings: HashMap<Ident, BTreeSet<Ident>>) -> syn::E
     }
 }
 
+/// Whether a field opts out of environment sourcing with `#[env(skip)]`.
+fn is_env_skip(field: &Field) -> bool {
+    field.attrs.iter().any(|attr| {
+        attr.path().is_ident("env")
+            && attr
+                .parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)
+                .map(|nested| {
+                    nested
+                        .iter()
+                        .any(|meta| matches!(meta, Meta::Path(p) if p.is_ident("skip")))
+                })
+                .unwrap_or(false)
+    })
+}
+
 fn env_var_fields(fields: &Punctuated<Field, Comma>) -> EnvVarFieldsResult {
     let mut output = Punctuated::new();
     let mut default_mappings: HashMap<Ident, BTreeSet<Ident>> = HashMap::new();
     for field in fields {
+        // `#[env(skip)]` opts a field out of environment sourcing entirely: no variable,
+        // no array slot in the generated source, and `None` from this layer (see
+        // `impl_source`). This is how a value that is *operator intent* rather than
+        // *configuration* is expressed — one that must never read a same-named variable
+        // from the surrounding shell.
+        let skip = is_env_skip(field);
+
         let mut n = 0_usize;
         field.attrs.iter().for_each(|attr| {
             if attr.path().is_ident("env") {
@@ -511,28 +541,42 @@ fn env_var_fields(fields: &Punctuated<Field, Comma>) -> EnvVarFieldsResult {
                 let env_vars: BTreeSet<Ident> = nested.iter().
                     filter_map(|item| {
                         match item {
+                            // `skip` is a directive, not the name of an environment variable.
+                            Meta::Path(pth) if pth.is_ident("skip") => None,
                             Meta::Path(pth) => Some(pth.get_ident().expect_or_abort("Must have identifier and not a path").clone()),
                             _ => None
                         }
                     })
                     .collect();
-                n+=env_vars.len();
-                let key = field.ident.clone().expect_or_abort("Identifiers for all fields must be known at this point");
-                default_mappings.entry(key.clone())
-                    .and_modify(|previous| {
-                        if !previous.is_disjoint(&env_vars) {
-                            proc_macro_error2::emit_error!(key, "Environment variable specifications must be disjoint. The field {key} has the following duplicate specifications {:?}",
-                                previous.intersection(&env_vars).map(|ident| ident.to_string()).collect::<Vec<_>>());
-                        }
-                        previous.extend(env_vars.iter().cloned())
-                    })
-                    .or_insert(env_vars);
+                n += env_vars.len();
+                if !env_vars.is_empty() {
+                    let key = field.ident.clone().expect_or_abort("Identifiers for all fields must be known at this point");
+                    default_mappings.entry(key.clone())
+                        .and_modify(|previous| {
+                            if !previous.is_disjoint(&env_vars) {
+                                proc_macro_error2::emit_error!(key, "Environment variable specifications must be disjoint. The field {key} has the following duplicate specifications {:?}",
+                                    previous.intersection(&env_vars).map(|ident| ident.to_string()).collect::<Vec<_>>());
+                            }
+                            previous.extend(env_vars.iter().cloned())
+                        })
+                        .or_insert(env_vars);
+                }
             }
         });
+
+        if skip {
+            if n > 0 {
+                proc_macro_error2::emit_error!(field.ident, "`#[env(skip)]` cannot be combined with environment variable names";
+                    help = "A field is either sourced from the environment (list its variables) or explicitly opts out with `skip` — not both. Remove `skip`, or remove the variable names.");
+            }
+            // Not env-sourced: contribute no struct field and no default mapping.
+            continue;
+        }
+
         if n == 0 {
             proc_macro_error2::emit_error!(field.ident, "At least one `env` directive must be specified";
                 help = "Try using an uppercase version of the field name: {}", field.ident.to_token_stream().to_string().to_uppercase();
-                note = "It is better to enforce that all env-var deserializeable fields are explicitly set in the code.")
+                note = "It is better to enforce that all env-var deserializeable fields are explicitly set in the code. If this field should not be read from the environment, mark it `#[env(skip)]`.")
         }
         // TODO: check uniqueness in leaf nodes
         // TODO: Check for empty nodes and replace with uppercase

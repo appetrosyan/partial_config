@@ -1,10 +1,14 @@
 [package]
 name = "partial_config"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "A Rust crate to implement layered partial configuration"
 license = "Apache-2.0"
+repository = "https://github.com/appetrosyan/partial_config"
+readme = "README.md"
+keywords = ["config", "configuration", "cli", "env", "layered"]
+categories = ["config", "command-line-interface"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,7 +24,7 @@ tracing = ["dep:tracing", "partial_config_derive/tracing"]
 log = ["dep:log", "partial_config_derive/log"]
 
 [dependencies]
-partial_config_derive = { version = "0.5.1", optional = true, path = "derive/" }
+partial_config_derive = { version = "0.5.2", optional = true, path = "derive/" }
 
 serde = { version = "1.0.197", optional = true, default-features = false }
 serde_json = { version = "1.0.114", optional = true, default-features = false }

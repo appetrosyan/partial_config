@@ -151,3 +151,36 @@ fn complete_config_overrides_correctly() {
 fn rename_works() {
     EnvVarSomething::default();
 }
+
+#[derive(Debug, HasPartial, EnvSourced)]
+#[env_var_rename(SkipEnvSource)]
+pub struct WithSkip {
+    #[env(THING_A)]
+    pub a: String,
+
+    /// Operator intent, expressed on the command line — never read from the environment.
+    #[env(skip)]
+    pub b: String,
+}
+
+/// A `#[env(skip)]` field is not sourced from the environment: the generated source
+/// leaves it `None` for the CLI and default layers to supply, and no same-named variable
+/// can give it a value it was never meant to read.
+#[test]
+fn env_skip_field_is_never_sourced_from_the_environment() {
+    std::env::set_var("THING_A", "from-env");
+    std::env::set_var("B", "should-be-ignored");
+
+    let partial =
+        <SkipEnvSource as partial_config::Source<WithSkip>>::to_partial(SkipEnvSource::new())
+            .unwrap();
+
+    assert_eq!(partial.a, Some("from-env".to_string()));
+    assert_eq!(
+        partial.b, None,
+        "a `#[env(skip)]` field must not be read from the environment"
+    );
+
+    std::env::remove_var("THING_A");
+    std::env::remove_var("B");
+}

@@ -1,0 +1,8 @@
+error: `#[env(skip)]` cannot be combined with environment variable names
+
+         = help: A field is either sourced from the environment (list its variables) or explicitly opts out with `skip` — not both. Remove `skip`, or remove the variable names.
+
+ --> tests/ui/env_skip_and_keys.rs:6:9
+  |
+6 |     pub field: String,
+  |         ^^^^^
