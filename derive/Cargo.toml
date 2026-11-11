@@ -1,6 +1,6 @@
 [package]
 name = "partial_config_derive"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 authors = [ "Aleksandr Petrosyan" ]
 description = "Derive macros for `partial_config`: layered partial configuration"

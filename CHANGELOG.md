@@ -10,6 +10,16 @@ Git tags are `partial_config-vX.Y.Z` and `partial_config_derive-vX.Y.Z`.
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-11-11
+
+`partial_config_derive` 0.5.3.
+
+### Fixed
+
+- Generate warning-free environment parsing for infallible `FromStr` implementations.
+- Preserve concrete fallible parser errors for downcasting.
+- Require the corrected derive crate from `partial_config`.
+
 ## [0.7.3] — 2026-07-15
 
 `partial_config_derive` unchanged at 0.5.2.
