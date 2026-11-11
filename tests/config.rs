@@ -149,7 +149,7 @@ fn complete_config_overrides_correctly() {
 
 #[test]
 fn rename_works() {
-    EnvVarSomething::default();
+    let _: EnvVarSomething = Default::default();
 }
 
 #[derive(Debug, HasPartial, EnvSourced)]

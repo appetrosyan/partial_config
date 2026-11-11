@@ -5,14 +5,14 @@ error[E0277]: the trait bound `Option<String>: FromStr` is not satisfied
   |                          ^^^^^^^^^^^^^^ the trait `FromStr` is not implemented for `Option<String>`
   |
   = help: the following other types implement trait `FromStr`:
+            ByteString
+            CString
             IpAddr
             Ipv4Addr
             Ipv6Addr
             NonZero<i128>
             NonZero<i16>
             NonZero<i32>
-            NonZero<i64>
-            NonZero<i8>
           and $N others
 
 error[E0277]: the trait bound `Option<String>: FromStr` is not satisfied
@@ -22,13 +22,13 @@ error[E0277]: the trait bound `Option<String>: FromStr` is not satisfied
   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `FromStr` is not implemented for `Option<String>`
   |
   = help: the following other types implement trait `FromStr`:
+            ByteString
+            CString
             IpAddr
             Ipv4Addr
             Ipv6Addr
             NonZero<i128>
             NonZero<i16>
             NonZero<i32>
-            NonZero<i64>
-            NonZero<i8>
           and $N others
   = note: this error originates in the derive macro `partial_config::EnvSourced` (in Nightly builds, run with -Z macro-backtrace for more info)

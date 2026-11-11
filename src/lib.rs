@@ -188,7 +188,7 @@ pub mod env {
     /// # Errors
     ///
     /// - If any specified candidate environment variables has two
-    ///  different specifications
+    ///   different specifications
     ///
     /// # Warns
     ///
@@ -196,7 +196,7 @@ pub mod env {
     /// in an `Err` variant being constructed.
     ///
     /// - `None` is returned if neither of the candidate environment
-    ///    variables was present, or all contained non-unicode values.
+    ///   variables was present, or all contained non-unicode values.
     ///
     /// - If two candidates are set to the same value, a warning is
     ///   printed.

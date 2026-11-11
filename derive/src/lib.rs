@@ -465,15 +465,17 @@ fn impl_source(fields: &Punctuated<Field, Comma>) -> Punctuated<syn::FieldValue,
                     } else {
                         ty.clone()
                     };
+                    // Keep boxing out of the concrete error closure: Err may be Infallible.
                     syn::parse_quote! {
                         #ident: ::partial_config::env::extract(&self.#ident)?
                         .map(|s: String| <#inner_ty as ::core::str::FromStr>::from_str(&s))
                         .transpose()
-                        .map_err(|e|
+                        .map_err(::std::boxed::Box::new)
+                        .map_err(|error_condition|
                             ::partial_config::Error::ParseFieldError {
                                 field_name: stringify!(#ident),
                                 field_type: stringify!(#ty),
-                                error_condition: Box::new(e)
+                                error_condition
                             })?
                     }
                 }
